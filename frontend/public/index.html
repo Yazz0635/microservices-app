@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GitOps DevSecOps Demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background:#0f172a; color:#e2e8f0; margin:0; padding:40px; }
+    .card { max-width:640px; margin:auto; background:#1e293b; border-radius:12px; padding:28px; }
+    h1 { margin-top:0; color:#38bdf8; }
+    li { padding:6px 0; border-bottom:1px solid #334155; }
+    small { color:#94a3b8; }
+    input, button { padding:8px 10px; border-radius:6px; border:1px solid #475569; }
+    input { background:#0f172a; color:#e2e8f0; }
+    button { background:#0ea5e9; color:#fff; border:none; cursor:pointer; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>GitOps &amp; DevSecOps Demo</h1>
+    <p><small>Frontend → API microservice on Kubernetes</small></p>
+    <ul id="list"></ul>
+    <input id="name" placeholder="New tool name" />
+    <button onclick="add()">Add</button>
+    <p><small id="version">Version: v1</small></p>
+  </div>
+  <script>
+    async function load() {
+      const res = await fetch('/api/items');
+      const items = await res.json();
+      document.getElementById('list').innerHTML =
+        items.map(i => `<li>${i.name} <small>(${i.category})</small></li>`).join('');
+    }
+    async function add() {
+      const name = document.getElementById('name').value.trim();
+      if (!name) return;
+      await fetch('/api/items', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name }) });
+      document.getElementById('name').value = '';
+      load();
+    }
+    load();
+  </script>
+</body>
+</html>

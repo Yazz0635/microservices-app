@@ -1,0 +1,13 @@
+services:
+  api:
+    build: ./api
+    ports:
+      - "3000:3000"
+  frontend:
+    build: ./frontend
+    environment:
+      - API_URL=http://api:3000
+    ports:
+      - "8081:8080"
+    depends_on:
+      - api

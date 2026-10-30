@@ -1,0 +1,22 @@
+{
+  "name": "gitops-api",
+  "version": "1.0.0",
+  "description": "Items API microservice with health probes and Prometheus metrics",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "jest --coverage"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "prom-client": "^15.1.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageReporters": ["lcov", "text-summary"]
+  }
+}

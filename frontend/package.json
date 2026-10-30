@@ -1,0 +1,21 @@
+{
+  "name": "gitops-frontend",
+  "version": "1.0.0",
+  "description": "Frontend microservice that serves the UI and proxies /api to the API service",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "jest --coverage"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "coverageReporters": ["lcov", "text-summary"]
+  }
+}

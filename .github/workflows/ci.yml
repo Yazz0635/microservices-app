@@ -1,0 +1,113 @@
+name: CI - DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+
+jobs:
+  # ---------- 1. Unit tests ----------
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ${{ matrix.service }}/package-lock.json
+      - name: Install and test
+        working-directory: ${{ matrix.service }}
+        run: |
+          npm ci
+          npm test
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.service }}
+          path: ${{ matrix.service }}/coverage/lcov.info
+
+  # ---------- 2. Code quality (SonarCloud) ----------
+  sonar:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-api
+          path: api/coverage
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage-frontend
+          path: frontend/coverage
+      - name: SonarCloud scan
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ---------- 3. Build image, scan with Trivy, push ----------
+  build-scan-push:
+    needs: [test, sonar]
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (local)
+        uses: docker/build-push-action@v6
+        with:
+          context: ./${{ matrix.service }}
+          load: true
+          tags: ${{ env.DOCKERHUB_USER }}/gitops-${{ matrix.service }}:${{ github.sha }}
+      - name: Trivy vulnerability scan (fails on HIGH/CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.DOCKERHUB_USER }}/gitops-${{ matrix.service }}:${{ github.sha }}
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Login to Docker Hub
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Push image
+        if: github.event_name == 'push'
+        run: docker push ${{ env.DOCKERHUB_USER }}/gitops-${{ matrix.service }}:${{ github.sha }}
+
+  # ---------- 4. GitOps: bump image tags in the manifests repo ----------
+  update-manifests:
+    if: github.event_name == 'push'
+    needs: build-scan-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout manifests repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/gitops-manifests
+          token: ${{ secrets.GITOPS_PAT }}
+      - name: Update image tags
+        run: |
+          yq -i '(.images[] | select(.name == "${{ env.DOCKERHUB_USER }}/gitops-api")).newTag = "${{ github.sha }}"' app/kustomization.yaml
+          yq -i '(.images[] | select(.name == "${{ env.DOCKERHUB_USER }}/gitops-frontend")).newTag = "${{ github.sha }}"' app/kustomization.yaml
+          cat app/kustomization.yaml
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add app/kustomization.yaml
+          git commit -m "ci: deploy ${{ github.sha }}" || echo "nothing to commit"
+          git push
